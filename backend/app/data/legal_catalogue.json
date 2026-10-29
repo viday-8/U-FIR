@@ -1,0 +1,42 @@
+{
+  "catalogue_version": "demo-0.1",
+  "verified": false,
+  "notice": "DEMO catalogue. Section descriptions are short paraphrases, not statutory text, and are NOT verified. The department's legal team must supply and approve the authoritative provisions before any real use.",
+  "entries": [
+    {
+      "id": "APEXC-34A",
+      "act": "Andhra Pradesh Excise Act, 1968",
+      "section": "34(a)",
+      "title": "Illicit liquor: unlicensed manufacture, import, transport, possession or sale",
+      "summary": "Provision commonly cited in Excise FIRs for illicit liquor offences. Check the current text and punishment with legal.",
+      "items": ["ndpl", "non-duty paid liquor", "id liquor", "illicit distilled liquor", "karnataka-made liquor", "indian made liquor", "iml", "jaggery wash", "black jaggery", "spirit"],
+      "activities": ["transport", "carrying", "carried", "brought", "possession", "sale", "selling", "sold", "manufactur", "distill", "stored", "supplied"]
+    },
+    {
+      "id": "APEXC-46",
+      "act": "Andhra Pradesh Excise Act, 1968",
+      "section": "46",
+      "title": "Seized vehicles and articles: confiscation and release proceedings",
+      "summary": "Proceedings concerning vehicles and articles seized in Excise cases. Check applicability and procedure with legal.",
+      "needs_vehicle_seized": true
+    },
+    {
+      "id": "APPROH-7A",
+      "act": "Andhra Pradesh Prohibition Act, 1995",
+      "section": "7A",
+      "title": "Arrack: production, storage, possession, transport or sale prohibited",
+      "summary": "Prohibition provisions relating to arrack. Check current text with legal.",
+      "items": ["arrack"],
+      "activities": ["transport", "carrying", "possession", "found with", "sale", "selling", "sold", "manufactur", "stored", "shed"]
+    },
+    {
+      "id": "NDPS-20",
+      "act": "Narcotic Drugs and Psychotropic Substances Act, 1985",
+      "section": "20",
+      "title": "Cannabis (ganja): offences graded by quantity",
+      "summary": "Offences concerning cannabis. Punishment depends on the quantity class; the quantity must be checked against the notified thresholds by legal.",
+      "items": ["ganja", "dry ganja"],
+      "activities": ["transport", "carrying", "found", "possession", "stopped", "seized"]
+    }
+  ]
+}

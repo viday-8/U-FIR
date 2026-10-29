@@ -1,0 +1,10 @@
+# Untested in the build environment. `JWT_SECRET=<long random> docker compose up --build`
+services:
+  ufir:
+    build: .
+    ports: ["8000:8000"]
+    environment:
+      JWT_SECRET: ${JWT_SECRET:?set a long random JWT_SECRET}
+    volumes: ["ufir-data:/data"]
+volumes:
+  ufir-data:
