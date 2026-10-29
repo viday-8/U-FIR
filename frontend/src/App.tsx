@@ -1,6 +1,6 @@
-import { ClipboardCheck, FolderOpen, Gavel, Gauge, LayoutDashboard, LogOut, MapPin, MessageSquare, Network, ScrollText, Search, ShieldCheck } from 'lucide-react'
+import { ClipboardCheck, FileUp, FolderOpen, Gavel, Gauge, LayoutDashboard, LogOut, MapPin, MessageSquare, Network, ScrollText, Search, ShieldCheck } from 'lucide-react'
 import { useEffect, useState, type ReactNode } from 'react'
-import { api, getRole, hasToken, setSession } from './api'
+import { api, getDistrict, getRole, hasToken, setSession } from './api'
 import Audit from './Audit'
 import CasesList from './CasesList'
 import Cockpit from './Cockpit'
@@ -8,6 +8,7 @@ import Copilot from './Copilot'
 import Dashboard from './Dashboard'
 import Governance from './Governance'
 import Hotspots from './Hotspots'
+import Intake from './Intake'
 import ReviewQueue from './ReviewQueue'
 import Relationships from './Relationships'
 import SearchPage from './SearchPage'
@@ -27,8 +28,8 @@ function Login({ onDone }: { onDone: () => void }) {
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
     try {
-      const r = await api<{ token: string; role: string }>('/auth/login', { method: 'POST', body: JSON.stringify({ username: u, password: p }) })
-      setSession(r.token, r.role); onDone()
+      const r = await api<{ token: string; role: string; district: string | null }>('/auth/login', { method: 'POST', body: JSON.stringify({ username: u, password: p }) })
+      setSession(r.token, r.role, r.district ?? ''); onDone()
     } catch { setErr('Invalid username or password') }
   }
   return (
@@ -50,6 +51,7 @@ function Login({ onDone }: { onDone: () => void }) {
 const NAV: { href: string; match: string; label: string; icon: ReactNode; roles?: string[] }[] = [
   { href: '#/dashboard', match: '/dashboard', label: 'Command Center', icon: <LayoutDashboard size={17} /> },
   { href: '#/cases', match: '/cases', label: 'Cases', icon: <FolderOpen size={17} /> },
+  { href: '#/intake', match: '/intake', label: 'Upload Case Files', icon: <FileUp size={17} />, roles: ['investigator', 'supervisor', 'admin'] },
   { href: '#/search', match: '/search', label: 'Search', icon: <Search size={17} /> },
   { href: '#/copilot', match: '/copilot', label: 'Copilot', icon: <MessageSquare size={17} /> },
   { href: '#/relationships', match: '/relationships', label: 'Relationships', icon: <Network size={17} /> },
@@ -71,6 +73,7 @@ export default function App() {
   let page: ReactNode
   if (parts[0] === 'cases' && parts[1]) page = <Cockpit id={Number(parts[1])} />
   else if (parts[0] === 'cases') page = <CasesList />
+  else if (parts[0] === 'intake') page = <Intake district={getDistrict()} />
   else if (parts[0] === 'search') page = <SearchPage key={params.get('q') ?? ''} initial={params.get('q') ?? ''} />
   else if (parts[0] === 'copilot') page = <Copilot key={params.get('case') ?? ''} initialCase={params.get('case') ?? ''} />
   else if (parts[0] === 'relationships') page = <Relationships />

@@ -11,7 +11,7 @@ Excise case records are free text in many station formats. Officers search by ha
 ## Official capabilities and outcomes → what to look at
 | Brief | Delivered | Screenshot |
 |---|---|---|
-| C1/O1 Messy files → searchable data | Ingest of text, PDF and scanned images (open-source OCR), fact extraction with source quotes, search tolerant of spelling/transliteration variants | [04](docs/screenshots/04-search-spelling-variants.png) |
+| C1/O1 Messy files → searchable data | **Upload Case Files** (text, Word, PDF, scanned images with open-source OCR): the system reads each file, suggests document type, case and registration date, flags duplicates, lets the officer confirm or create the case, then extracts, fact extraction with source quotes, search tolerant of spelling/transliteration variants | [04](docs/screenshots/04-search-spelling-variants.png) |
 | C2 Understand a case quickly | Case Cockpit: cited brief, timeline, conflicts, missing information, one-click source highlighting | [02](docs/screenshots/02-case-cockpit-cited-brief.png) |
 | C3 Suggest laws/sections | Catalogue-limited suggestions with cited facts and passages; abstains when facts are thin; accept/reject with reasons | [03](docs/screenshots/03-legal-suggestions.png) |
 | C4/O3 Repeat offenders and networks | Conservative identity matching (name + family/village signals, never name alone), evidence for and against, human confirm/reject, graph + accessible table | [05](docs/screenshots/05-relationship-explorer.png) |
@@ -45,8 +45,8 @@ Open-source stack: FastAPI, SQLAlchemy, React, Cytoscape, RapidOCR, pypdf, rapid
 Every endpoint authenticated; one shared access check (role + district) applied to search, snippets, counts, citations, graph, Copilot and exports; restricted records return the same 404 as missing ones; login rate limiting; security headers and CSP; no-store caching of API data; parameterised SQL; upload type/size limits with server-chosen filenames; prompt-injection text in documents is treated as data (a test seeds one); audit rows hold references, not document text; synthetic data only.
 
 ## Quality evidence
-- **67 automated tests** covering access scoping, no-leak, review rules, extraction, matching, drafts, Copilot, OCR, hardening. The full demo journey was also driven end to end in a browser.
-- **Accessibility:** automated axe-core scan (WCAG 2.2 A/AA rules) across 12 pages in light and dark themes: 0 violations; keyboard focus styles, skip link, table alternatives to graph. Automated scans are supporting evidence, not a full audit.
+- **73 automated tests** covering access scoping, no-leak, review rules, extraction, matching, drafts, Copilot, OCR, hardening. The full demo journey was also driven end to end in a browser.
+- **Accessibility:** automated axe-core scan (WCAG 2.2 A/AA rules) across 13 pages in light and dark themes: 0 violations; keyboard focus styles, skip link, table alternatives to graph. Automated scans are supporting evidence, not a full audit.
 - **Extraction (held-out, 6 synthetic documents, 37 facts):** precision ≈ 84%, recall ≈ 84%; person recall 56%, place precision 56%. Small, single-annotator, synthetic: do not extrapolate.
 
 ## Run it

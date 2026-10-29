@@ -1,16 +1,18 @@
 let token = ''
 let role = ''
-try { token = sessionStorage.getItem('token') ?? ''; role = sessionStorage.getItem('role') ?? '' } catch { /* storage unavailable */ }
+let district = ''
+try { token = sessionStorage.getItem('token') ?? ''; role = sessionStorage.getItem('role') ?? ''; district = sessionStorage.getItem('district') ?? '' } catch { /* storage unavailable */ }
 
-export function setSession(t: string, r = '') {
-  token = t; role = r
+export function setSession(t: string, r = '', d = '') {
+  token = t; role = r; district = d
   try {
-    if (t) { sessionStorage.setItem('token', t); sessionStorage.setItem('role', r) }
-    else { sessionStorage.removeItem('token'); sessionStorage.removeItem('role') }
+    if (t) { sessionStorage.setItem('token', t); sessionStorage.setItem('role', r); sessionStorage.setItem('district', d) }
+    else { sessionStorage.removeItem('token'); sessionStorage.removeItem('role'); sessionStorage.removeItem('district') }
   } catch { /* ignore */ }
 }
 export const hasToken = () => !!token
 export const getRole = () => role
+export const getDistrict = () => district || null
 
 export async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch('/api/v1' + path, {
@@ -99,3 +101,8 @@ export type Governance = {
   data_quality: { documents: number; needs_review: number; failed: number; ocr_documents: number; languages: Record<string, number>; facts_by_type: Record<string, number>; facts_corrected_by_officers: number; correction_events: number }
 }
 export type Correction = { fact_id: number; action: string; type: string; old: string | null; new: string | null; by: string; reason: string; at: string }
+export type IntakeResult = {
+  filename: string; size: number; ok: boolean; error?: string; doc_type?: string | null; case_ref?: string | null; registered_on?: string | null
+  matches?: { id: number; case_no: string; station: string }[]; matched_case_id?: number | null
+  duplicate_of?: { document_id: number; case_id: number; case_no: string } | null; ocr?: boolean; language?: string
+}

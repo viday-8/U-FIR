@@ -34,11 +34,11 @@ export default function UploadPanel({ caseId, onDone }: { caseId: number; onDone
     <section className="card">
       <div className="cardhead"><h2><FileUp size={16} /> Add documents</h2></div>
       <div className="pad">
-        <Notice>Upload text files, PDFs or scanned images (.txt, .pdf, .png, .jpg). Scanned pages are read with OCR and always sent for review; originals are stored unchanged.</Notice>
+        <Notice>Upload text, Word, PDF or scanned image files (.txt, .docx, .pdf, .png, .jpg). Scanned pages are read with OCR and always sent for review; originals are stored unchanged.</Notice>
         <div className="formrow">
           <label>Document type<select value={docType} onChange={e => setDocType(e.target.value)}>
             <option value="fir">FIR</option><option value="seizure">Seizure panchanama</option><option value="diary">Case diary</option><option value="progress">Progress report</option><option value="remand">Remand report</option></select></label>
-          <label>Files<input ref={input} type="file" multiple accept=".txt,.pdf,.png,.jpg,.jpeg" onChange={e => void upload(e.target.files)} /></label>
+          <label>Files<input ref={input} type="file" multiple accept=".txt,.pdf,.docx,.png,.jpg,.jpeg" onChange={e => void upload(e.target.files)} /></label>
         </div>
         {items.length > 0 && <ul className="list">{items.map(i => <li key={i.name} className="row"><span>{i.name}{i.error && <span className="muted small"> · {i.error}</span>}</span><Badge status={i.status} /></li>)}</ul>}
       </div>

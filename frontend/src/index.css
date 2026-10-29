@@ -104,3 +104,4 @@ td a, td .link { display:inline-block; min-height:24px; line-height:24px; } .lis
 .skip { position:absolute; left:8px; top:-60px; z-index:50; background:var(--accent); color:var(--accent-ink); border:0; padding:8px 14px; border-radius:0 0 8px 8px; font:inherit; font-weight:600; } .skip:focus { top:0; }
 main:focus { outline:none; }
 .docactions { margin-top:6px; display:grid; gap:6px; } .seg.reviewed { background:#0b7285; } .dot.reviewed { background:#0b7285; }
+.errtext { color:var(--bad); } td select { max-width:260px; } a.btn.primary { color:var(--accent-ink); }

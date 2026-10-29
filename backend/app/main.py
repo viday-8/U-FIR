@@ -15,7 +15,8 @@ from fastapi.responses import PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 
 from .services import drafts as drafts_svc
-from .services import analytics, evaluate
+from .services import analytics, evaluate, intake
+from .services import ocr as ocr_svc
 from .services import copilot as copilot_svc
 from .services import graph, ingest, legal, search
 from . import audit, config
@@ -88,6 +89,66 @@ def get_audit(user: User = Depends(current_user), db: Session = Depends(get_db))
     rows = db.scalars(select(Audit).order_by(Audit.id.desc()).limit(200))
     return [{"at": r.at, "actor": r.actor, "action": r.action, "resource": r.resource,
              "model": r.model, "outcome": r.outcome} for r in rows]
+
+
+class NewCase(BaseModel):
+    case_no: str
+    district: str
+    station: str
+    registered_on: str  # YYYY-MM-DD
+
+
+@app.post("/api/v1/cases", status_code=201)
+def create_case(body: NewCase, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    from datetime import date
+    require_role(user, "investigator", "supervisor", "admin")
+    case_no, station = body.case_no.strip(), body.station.strip()
+    if not case_no or len(case_no) > 40 or not station or len(station) > 80:
+        raise HTTPException(422, "Case number (max 40) and station (max 80) are required")
+    try:
+        date.fromisoformat(body.registered_on)
+    except ValueError:
+        raise HTTPException(422, "Registration date must be YYYY-MM-DD")
+    if user.district is not None and body.district != user.district:
+        raise HTTPException(403, "You can only create cases in your own district")
+    if db.scalar(select(Case).where(Case.case_no == case_no)):
+        raise HTTPException(409, "A case with this number already exists")
+    case = Case(case_no=case_no, district=body.district.strip(), station=station, registered_on=body.registered_on)
+    db.add(case)
+    db.commit()
+    audit.log(db, user.username, "create_case", f"case:{case.id}", outcome="created")
+    return case_out(case)
+
+
+@app.post("/api/v1/intake/analyze")
+async def analyze_files(files: list[UploadFile] = File(...), user: User = Depends(current_user), db: Session = Depends(get_db)):
+    """Suggests document type and case for each file. Stores nothing; the officer confirms before upload."""
+    require_role(user, "investigator", "supervisor", "admin")
+    if len(files) > 20:
+        raise HTTPException(413, "Upload at most 20 files at a time")
+    results = []
+    for f in files:
+        name, data = f.filename or "file", await f.read()
+        item = {"filename": name, "size": len(data)}
+        try:
+            if len(data) > config.MAX_UPLOAD_BYTES:
+                raise HTTPException(413, "File too large (limit 5 MB)")
+            if not name.lower().endswith(tuple(ingest.ALLOWED)):
+                raise HTTPException(415, "Accepted: .txt .pdf .docx .png .jpg")
+            pages = ingest._pages_from(name, data)
+            text = "\n".join(t for t, _ in pages)
+            ref = intake.find_case_ref(text)
+            matches = intake.match_cases(db, user, ref)
+            item |= {"ok": True, "doc_type": intake.guess_doc_type(text), "case_ref": f"{ref[0]}/{ref[1]}" if ref else None,
+                     "registered_on": intake.find_registered_on(text), "matches": matches,
+                     "matched_case_id": matches[0]["id"] if len(matches) == 1 else None,  # ambiguous or none: officer must choose
+                     "duplicate_of": intake.duplicate_of(db, user, data), "ocr": any(o for _, o in pages),
+                     "language": ocr_svc.language_of(text)}
+        except HTTPException as e:
+            item |= {"ok": False, "error": e.detail}
+        results.append(item)
+    audit.log(db, user.username, "intake_analyze", "scope:own", outcome=f"{len(results)} file(s)")
+    return results
 
 
 @app.post("/api/v1/ingest", status_code=202)

@@ -5,6 +5,7 @@ Run `./run_demo.sh`, open http://localhost:8000. The banner always says DEMO · 
 | Time | Screen | Say / do | PRD |
 |---|---|---|---|
 | 0:00 | Slide / Cases | Problem: free-text Excise files; officers search by hand, miss repeat offenders, retype diaries. We add an intelligence layer over existing records; officers change nothing. | C1 |
+| 0:30 | Upload Case Files | Drop a Word FIR, a panchanama and a diary: the system reads each, detects the type, matches the diary to its existing case, offers to create the new case (date pre-filled), rejects a bad file, and flags a duplicate. Upload → processed in seconds. | C1, O1 |
 | 0:45 | Command Center (`sup_vizag`) | Pipeline of 13 processed documents, needs-attention list, honest counts. Every tile opens a filtered list. | O1 |
 | 1:30 | Cases → EXC/NRP/041/2025 | The Case Brief. Click “Ramesh Babu Naidu … is named in the records” → the exact sentence highlights in the original FIR. Point out “named in the records”, never “guilty”. Show Missing/Conflicts. | C2 |
 | 2:15 | Case → Documents | Upload a scanned panchanama image: OCR reads it, it is badged “OCR text” and goes to review. Facts tab: correct a fact; the old value, who and why are kept. Review Queue: mark the scan reviewed with a note (it leaves the queue and is audited). | C1, EXT-06 |

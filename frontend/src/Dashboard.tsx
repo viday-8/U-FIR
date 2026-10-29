@@ -1,6 +1,6 @@
 import { AlertTriangle, FileCheck2, FolderOpen, Network, Scale, ScrollText } from 'lucide-react'
 import { useState } from 'react'
-import { api, type Dashboard as D } from './api'
+import { api, getRole, type Dashboard as D } from './api'
 import { Empty, ErrorBox, fmtDate, Loading, Notice, PageHeader, useAsync } from './ui'
 
 const STAGES = [['received', 'Received'], ['indexed', 'Processed'], ['reviewed', 'Reviewed by a person'], ['needs_review', 'Needs review'], ['failed', 'Failed']] as const
@@ -27,7 +27,8 @@ export default function Dashboard() {
   const href = (a: D['attention'][number]) => a.kind === 'identity' ? '#/relationships' : a.kind === 'draft' ? `#/studio/${a.draft_id}` : `#/cases/${a.case_id}`
   return (
     <>
-      <PageHeader title="Command Center" sub={`${d.user.district ?? 'All districts'} · signed in as ${d.user.role}. ${c.facts} facts extracted from ${c.documents} document(s).`} />
+      <PageHeader title="Command Center" sub={`${d.user.district ?? 'All districts'} · signed in as ${d.user.role}. ${c.facts} facts extracted from ${c.documents} document(s).`}
+        actions={['investigator', 'supervisor', 'admin'].includes(getRole()) ? <a className="btn primary" href="#/intake">Upload case files</a> : undefined} />
       {opts && (
         <div className="toolbar" role="group" aria-label="Filters">
           {opts.districts.length > 1 && <label className="inline">District<select value={f.district} onChange={e => setF({ ...f, district: e.target.value, station: '' })}><option value="">All</option>{opts.districts.map(x => <option key={x}>{x}</option>)}</select></label>}

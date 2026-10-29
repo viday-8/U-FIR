@@ -11,7 +11,20 @@ from ..db import SessionLocal
 from ..models import Document, Fact, Page
 from . import extract, ocr, resolve, search
 
-ALLOWED = {".txt", ".pdf", ".png", ".jpg", ".jpeg"}
+ALLOWED = {".txt", ".pdf", ".docx", ".png", ".jpg", ".jpeg"}
+
+
+def _docx_text(data: bytes) -> str:
+    from docx import Document as Word
+    try:
+        doc = Word(BytesIO(data))
+    except Exception:
+        raise HTTPException(422, "This Word file could not be read (is it a valid .docx?)")
+    lines = [p.text for p in doc.paragraphs]
+    for table in doc.tables:  # many FIRs keep particulars in a table; read cells row by row
+        for row in table.rows:
+            lines.append("  ".join(c.text.strip() for c in row.cells if c.text.strip()))
+    return "\n".join(l for l in lines if l.strip())
 
 
 def _pages_from(filename: str, data: bytes) -> list[tuple[str, bool]]:
@@ -19,6 +32,8 @@ def _pages_from(filename: str, data: bytes) -> list[tuple[str, bool]]:
     name = filename.lower()
     if name.endswith((".png", ".jpg", ".jpeg")):
         pages = [(ocr.ocr_image_bytes(data), True)]
+    elif name.endswith(".docx"):
+        pages = [(_docx_text(data), False)]
     elif name.endswith(".pdf"):
         reader = PdfReader(BytesIO(data))
         pages = []
