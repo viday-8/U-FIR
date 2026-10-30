@@ -2,6 +2,7 @@ import { Check, Download, Save, Send, Undo2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { api, type DraftFull, type DraftSummary, type Fact, getRole } from './api'
 import { EvidenceViewer, type Evidence } from './Evidence'
+import { useCrumb } from './Shell'
 import { Badge, Empty, ErrorBox, fmtDate, Loading, Notice, PageHeader, useAsync } from './ui'
 
 const STATUSES = ['', 'draft', 'in_review', 'returned', 'approved']
@@ -38,6 +39,7 @@ export function StudioEditor({ id }: { id: number }) {
   const [comment, setComment] = useState('')
   const [msg, setMsg] = useState<{ tone: 'ok' | 'bad'; text: string } | null>(null)
   const role = getRole()
+  useCrumb(d?.title)
   useEffect(() => { if (d) setText(Object.fromEntries(d.sections.map(s => [s.key, s.text]))) }, [d])
   if (loading && !d) return <Loading what="Opening draft" />
   if (error || !d) return <ErrorBox message={error || 'Not found'} retry={reload} />

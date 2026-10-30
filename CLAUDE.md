@@ -1,4 +1,4 @@
-# u-FIR Nexus: project context (read first)
+# U-FIR ANVESHANA: project context (read first)
 
 Hackathon prototype for the AP Prohibition & Excise "Unified FIR" challenge. Full spec: `u-FIR_Nexus_Product_Requirements_Document.md` (PRD). Design: `docs/ARCHITECTURE.md`.
 

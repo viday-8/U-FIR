@@ -170,3 +170,62 @@ class FactCorrection(Base):
     by: Mapped[str] = mapped_column(String(50))
     reason: Mapped[str] = mapped_column(Text)
     at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+
+
+class CaseTag(Base):
+    """Officer override of the automatic offence-type tags for one case."""
+    __tablename__ = "case_tag"
+    case_id: Mapped[int] = mapped_column(ForeignKey("case.id"), primary_key=True)
+    tags: Mapped[list] = mapped_column(JSON)
+    by: Mapped[str] = mapped_column(String(50))
+    reason: Mapped[str] = mapped_column(Text)
+    at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+
+
+class Accused(Base):
+    """A person in custody/bail terms. Separate from extracted persons: an officer decides who is an accused."""
+    __tablename__ = "accused"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    case_id: Mapped[int] = mapped_column(ForeignKey("case.id"), index=True)
+    name: Mapped[str] = mapped_column(String(200))
+    father_or_spouse: Mapped[str | None] = mapped_column(String(200))
+    age: Mapped[str | None] = mapped_column(String(10))
+    status: Mapped[str] = mapped_column(String(15), default="named")  # named|arrested|remanded|bailed|absconding
+    arrested_on: Mapped[str | None] = mapped_column(String(10))
+    remand_till: Mapped[str | None] = mapped_column(String(10))
+    bail_on: Mapped[str | None] = mapped_column(String(10))
+
+
+class Property(Base):
+    """Seizure register entry (malkhana): what was seized, where it is, and sample/lab status."""
+    __tablename__ = "property"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    case_id: Mapped[int] = mapped_column(ForeignKey("case.id"), index=True)
+    kind: Mapped[str] = mapped_column(String(10))  # liquor|ganja|vehicle|other
+    description: Mapped[str] = mapped_column(String(300))
+    quantity: Mapped[str | None] = mapped_column(String(100))
+    custody: Mapped[str] = mapped_column(String(120), default="Station malkhana")
+    status: Mapped[str] = mapped_column(String(20), default="seized")  # seized|sample_sent|lab_report_received|produced_in_court|released|destroyed
+    sample_sent_on: Mapped[str | None] = mapped_column(String(10))
+    lab_report_on: Mapped[str | None] = mapped_column(String(10))
+
+
+class Milestone(Base):
+    """A date that must not be missed: chargesheet limit, remand expiry, court hearing, lab report."""
+    __tablename__ = "milestone"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    case_id: Mapped[int] = mapped_column(ForeignKey("case.id"), index=True)
+    kind: Mapped[str] = mapped_column(String(20))
+    title: Mapped[str] = mapped_column(String(200))
+    due_on: Mapped[str] = mapped_column(String(10), index=True)
+    done: Mapped[bool] = mapped_column(default=False)
+
+
+class CaseCheck(Base):
+    """Manual ticks on the compliance checklist (the other items are derived from the records)."""
+    __tablename__ = "case_check"
+    case_id: Mapped[int] = mapped_column(ForeignKey("case.id"), primary_key=True)
+    key: Mapped[str] = mapped_column(String(30), primary_key=True)
+    done: Mapped[bool] = mapped_column(default=False)
+    by: Mapped[str] = mapped_column(String(50))
+    at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)

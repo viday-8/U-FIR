@@ -26,7 +26,10 @@ def hotspots(db: Session, user: User, kind: str = "location") -> dict:
         by_station[c.station].append(c.id)
         by_month[c.registered_on[:7]] += 1
     covered = {i for r in rows for i in r["case_ids"]}
-    return {"kind": kind, "places": rows,
+    months = sorted(by_month)
+    heat = [{"station": st, "counts": [sum(1 for i in ids if cases[i].registered_on[:7] == m) for m in months], "total": len(ids)}
+            for st, ids in sorted(by_station.items(), key=lambda kv: -len(kv[1]))]
+    return {"kind": kind, "places": rows, "heatmap": {"months": months, "rows": heat},
             "stations": sorted(({"name": s, "cases": len(ids), "case_ids": ids} for s, ids in by_station.items()), key=lambda r: -r["cases"]),
             "months": dict(sorted(by_month.items())),
             "coverage": {"cases_with_place": len(covered), "cases_total": len(cases),

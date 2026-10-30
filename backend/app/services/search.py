@@ -41,8 +41,24 @@ def ranked_pages(db: Session, case_ids: list[int], terms: list[str], limit: int 
     return [tuple(r) for r in rows if r[0] in allowed][:limit]
 
 
-def search(db: Session, user: User, q: str, limit: int = 30, doc_type: str | None = None, station: str | None = None) -> dict:
-    allowed = {c.id: c for c in db.scalars(scoped_cases(user)) if not station or c.station == station}  # access scope applied first
+def _partial(q: str, name: str) -> int:
+    """Score for queries that are only part of a name ("Rameshbabu", "Naidu", "ramesh naidu"): every query word must
+    appear inside the name, or sound like one of its words."""
+    tokens = [t for t in norm_name(q).split() if len(t) >= 3]
+    flat, words = name.replace(" ", ""), name.split()
+    if not tokens:
+        return 0
+    for t in tokens:
+        if t in flat or phonetic(t) in phonetic(name):
+            continue
+        if not any(fuzz.ratio(t, w) >= 85 for w in words):
+            return 0
+    return 90
+
+
+def search(db: Session, user: User, q: str, limit: int = 30, doc_type: str | None = None, station: str | None = None,
+           only_cases: set[int] | None = None) -> dict:
+    allowed = {c.id: c for c in db.scalars(scoped_cases(user)) if (not station or c.station == station) and (only_cases is None or c.id in only_cases)}  # access scope applied first
     text_hits = []
     fts = _fts_query(q)
     if fts and allowed:
@@ -63,7 +79,7 @@ def search(db: Session, user: User, q: str, limit: int = 30, doc_type: str | Non
         for f in facts:
             if doc_type and docs.get(f.document_id) != doc_type:
                 continue
-            score = max(fuzz.ratio(target, f.normalised.replace(" ", "")), fuzz.ratio(phonetic(q), phonetic(f.normalised)))
+            score = max(fuzz.ratio(target, f.normalised.replace(" ", "")), fuzz.ratio(phonetic(q), phonetic(f.normalised)), _partial(q, f.normalised))
             if score >= NAME_THRESHOLD:
                 name_matches.append({"case_id": f.case_id, "case_no": allowed[f.case_id].case_no,
                                      "fact_id": f.id, "name": f.original, "document_id": f.document_id,

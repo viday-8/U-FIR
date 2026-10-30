@@ -7,7 +7,7 @@ from .access import current_user, get_case_or_404, require_role, scoped_cases
 from .db import Base, engine, get_db
 from datetime import datetime, timezone
 
-from .models import Audit, Candidate, Case, Document, Draft, DraftVersion, Entity, Fact, FactCorrection, LegalSuggestion, Page, User
+from .models import Audit, Candidate, Case, CaseTag, Document, Milestone, Draft, DraftVersion, Entity, Fact, FactCorrection, LegalSuggestion, Page, User
 from .services import brief as brief_svc
 from pathlib import Path
 
@@ -15,15 +15,17 @@ from fastapi.responses import PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 
 from .services import drafts as drafts_svc
-from .services import analytics, evaluate, intake
+from . import cache, management
+from .services import analytics, evaluate, intake, profile
 from .services import ocr as ocr_svc
 from .services import copilot as copilot_svc
 from .services import graph, ingest, legal, search
 from . import audit, config
 from .security import hash_password, make_token, verify_password
 
-app = FastAPI(title="u-FIR Nexus API (DEMO / SYNTHETIC DATA)")
+app = FastAPI(title="U-FIR ANVESHANA API (DEMO / SYNTHETIC DATA)")
 Base.metadata.create_all(engine)
+app.include_router(management.router)  # accused, seizure register, deadlines, checklist, CSV export (before /cases/{id} so export.csv is not read as an id)
 
 
 @app.middleware("http")
@@ -76,6 +78,67 @@ def case_out(c: Case):
 @app.get("/api/v1/cases")
 def list_cases(user: User = Depends(current_user), db: Session = Depends(get_db)):
     return [case_out(c) for c in db.scalars(scoped_cases(user))]
+
+
+@app.get("/api/v1/cases/overview")
+def cases_overview(q: str = "", offence: str = "", station: str = "", status: str = "", district: str = "", from_date: str = "",
+                   to_date: str = "", flag: str = "", user: User = Depends(current_user), db: Session = Depends(get_db)):
+    """Cases with metadata and keyword matching, plus facet counts. Always limited to the user's own scope."""
+    rows, facets = profile.filtered(db, user, q[:200], offence, station, status, district, from_date, to_date, flag)
+    return {"items": rows, "facets": facets, "total": len(rows)}
+
+
+@app.get("/api/v1/cases/{case_id}/meta")
+def case_meta(case_id: int, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    case = get_case_or_404(db, user, case_id)
+    return profile.profiles(db, {case.id: case})[case.id]
+
+
+class TagEdit(BaseModel):
+    offence: list[str]
+    reason: str
+
+
+@app.put("/api/v1/cases/{case_id}/tags")
+def set_case_tags(case_id: int, body: TagEdit, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    """An officer corrects the automatic offence-type tags. The decision, who made it and why are kept."""
+    require_role(user, "investigator", "supervisor", "admin")
+    case = get_case_or_404(db, user, case_id)
+    if not body.reason.strip():
+        raise HTTPException(422, "A reason is required")
+    if not body.offence or len(body.offence) > 3 or any(t not in profile.OFFENCES for t in body.offence):
+        raise HTTPException(422, "Choose 1 to 3 offence types from the list")
+    row = db.get(CaseTag, case.id)
+    if row:
+        row.tags, row.by, row.reason = list(dict.fromkeys(body.offence)), user.username, body.reason.strip()
+    else:
+        db.add(CaseTag(case_id=case.id, tags=list(dict.fromkeys(body.offence)), by=user.username, reason=body.reason.strip()))
+    db.commit()
+    audit.log(db, user.username, "set_case_tags", f"case:{case.id}", outcome=", ".join(body.offence))
+    return profile.profiles(db, {case.id: case})[case.id]
+
+
+@app.delete("/api/v1/cases/{case_id}/tags")
+def reset_case_tags(case_id: int, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    require_role(user, "investigator", "supervisor", "admin")
+    case = get_case_or_404(db, user, case_id)
+    row = db.get(CaseTag, case.id)
+    if row:
+        db.delete(row)
+        db.commit()
+    audit.log(db, user.username, "set_case_tags", f"case:{case.id}", outcome="reset to automatic")
+    return profile.profiles(db, {case.id: case})[case.id]
+
+
+@app.get("/api/v1/offence-types")
+def offence_types(user: User = Depends(current_user)):
+    return profile.OFFENCES
+
+
+@app.get("/api/v1/cases/{case_id}/network")
+def case_network(case_id: int, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    get_case_or_404(db, user, case_id)
+    return graph.case_network(db, user, case_id)
 
 
 @app.get("/api/v1/cases/{case_id}")
@@ -222,9 +285,21 @@ def case_facts(case_id: int, user: User = Depends(current_user), db: Session = D
 
 
 @app.get("/api/v1/search")
-def search_endpoint(q: str, doc_type: str | None = None, station: str | None = None,
-                    user: User = Depends(current_user), db: Session = Depends(get_db)):
-    return search.search(db, user, q[:200], doc_type=doc_type, station=station)
+def search_endpoint(q: str, doc_type: str | None = None, station: str | None = None, offence: str = "", from_date: str = "",
+                    to_date: str = "", district: str = "", user: User = Depends(current_user), db: Session = Depends(get_db)):
+    has_filter = bool(offence or from_date or to_date or district)
+    rows, _ = profile.filtered(db, user, q[:200], offence, station or "", "", district, from_date, to_date)  # cases matching by metadata
+    scope = {r["id"] for r in profile.filtered(db, user, "", offence, station or "", "", district, from_date, to_date)[0]} if has_filter else None
+    res = search.search(db, user, q[:200], doc_type=doc_type, station=station, only_cases=scope)
+    res["case_hits"] = [{k: r[k] for k in ("id", "case_no", "station", "district", "registered_on", "matched")}
+                        | {"offence": r["meta"]["offence"], "accused": [a["name"] for a in r["meta"]["accused"]][:3], "vehicles": r["meta"]["vehicles"][:2]}
+                        for r in rows if r["matched"]][:12]
+    return res
+
+
+@app.get("/api/v1/search/suggest")
+def search_suggest(q: str = "", user: User = Depends(current_user), db: Session = Depends(get_db)):
+    return profile.suggest(db, user, q[:80])
 
 
 @app.get("/api/v1/cases/{case_id}/brief")
@@ -260,8 +335,13 @@ def list_candidates(status: str | None = None, user: User = Depends(current_user
 
 
 @app.get("/api/v1/relationships")
-def relationships(user: User = Depends(current_user), db: Session = Depends(get_db)):
-    return graph.build_graph(db, user)
+def relationships(linked_only: bool = False, focus: str | None = None, depth: int = 2, limit: int = 400,
+                  user: User = Depends(current_user), db: Session = Depends(get_db)):
+    """The network the user may see. Scoping by district happens first; linked_only/focus/limit only reduce it further.
+    Cached per district until any audited change to the records."""
+    limit = max(20, min(limit, 1500))
+    return cache.memo(("graph", user.district, linked_only, focus, depth, limit),
+                      lambda: graph.build_graph(db, user, linked_only, focus, depth, limit))
 
 
 class Decision(BaseModel):
@@ -500,6 +580,15 @@ def dashboard(district: str | None = None, station: str | None = None, from_mont
     for d in drafts:
         if d.status == "in_review":
             attention.append({"kind": "draft", "label": f"{drafts_svc.TYPES[d.doc_type]} for {cases[d.case_id].case_no} awaits review", "draft_id": d.id, "case_id": d.case_id})
+    from datetime import date as _date
+    today = _date.today()
+    due = [management._milestone_out(m, cases[m.case_id].case_no, today) for m in
+           db.query(Milestone).filter(Milestone.case_id.in_(ids), Milestone.done.is_(False)).order_by(Milestone.due_on)]
+    deadlines = {"overdue": sum(d["state"] == "overdue" for d in due), "soon": sum(d["state"] == "soon" for d in due),
+                 "items": [d for d in due if d["state"] in ("overdue", "soon")][:6]}
+    for d in deadlines["items"]:
+        if d["state"] == "overdue":
+            attention.insert(0, {"kind": "deadline", "label": f"OVERDUE: {d['title']} ({d['case_no']}, was due {d['due_on']})", "case_id": d["case_id"]})
     recent = []
     if user.role in ("admin", "supervisor"):
         recent = [{"at": r.at, "actor": r.actor, "action": r.action, "resource": r.resource, "outcome": r.outcome}
@@ -512,7 +601,7 @@ def dashboard(district: str | None = None, station: str | None = None, from_mont
                        "identity_to_review": sum(1 for c in cands if c["status"] == "unreviewed"),
                        "legal_to_review": legal_pending, "drafts_in_review": sum(1 for d in drafts if d.status == "in_review")},
             "pipeline": stages, "cases_by_station": by_station, "cases_by_month": dict(sorted(by_month.items())),
-            "attention": attention[:12], "recent_activity": recent, "data_notice": "Synthetic demo data."}
+            "attention": attention[:12], "deadlines": deadlines, "recent_activity": recent, "data_notice": "Synthetic demo data."}
 
 
 class CopilotQ(BaseModel):
@@ -632,7 +721,7 @@ def edit_fact(fact_id: int, body: FactEdit, user: User = Depends(current_user), 
                           fact_type=f.type, by=user.username, reason=body.reason.strip()))
     f.original, f.normalised, f.corrected = value, normalise.norm_value(f.type, value), True
     db.commit()
-    resolve.refresh(db)
+    resolve.refresh(db, {f.case_id})
     audit.log(db, user.username, "correct_fact", f"fact:{f.id}", evidence=[f.id], outcome="edited")
     return {"id": f.id, "original": f.original, "corrected": True}
 
@@ -647,7 +736,7 @@ def remove_fact(fact_id: int, body: FactReason, user: User = Depends(current_use
     case_id, fid = f.case_id, f.id
     db.delete(f)
     db.commit()
-    resolve.refresh(db)
+    resolve.refresh(db, {case_id})
     audit.log(db, user.username, "correct_fact", f"fact:{fid}", outcome="removed")
     return {"removed": fid, "case_id": case_id}
 
@@ -673,7 +762,7 @@ def add_fact(case_id: int, body: FactNew, user: User = Depends(current_user), db
     db.add(FactCorrection(fact_id=f.id, case_id=case_id, action="add", old_value=None, new_value=f.original,
                           fact_type=f.type, by=user.username, reason="Added by officer from the source text"))
     db.commit()
-    resolve.refresh(db)
+    resolve.refresh(db, {case_id})
     audit.log(db, user.username, "correct_fact", f"fact:{f.id}", evidence=[f.id], outcome="added")
     return {"id": f.id}
 

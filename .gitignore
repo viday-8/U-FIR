@@ -6,3 +6,4 @@ storage/
 node_modules/
 dist/
 test_storage/
+docs/screenshots/

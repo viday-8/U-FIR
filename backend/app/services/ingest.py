@@ -80,7 +80,7 @@ def process_document(doc_id: int) -> None:
     with SessionLocal() as db:
         doc = db.get(Document, doc_id)
         extract.extract_document(db, doc)
-        resolve.refresh(db)
+        resolve.refresh(db, {doc.case_id})
         ids = [f.id for f in db.query(Fact).filter_by(document_id=doc_id)]
         audit.log(db, "system", "extract_facts", f"document:{doc_id}", model=config.MODEL_LABEL,
                   evidence=ids, outcome=doc.status)

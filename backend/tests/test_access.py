@@ -77,3 +77,10 @@ def test_llm_extraction_drops_unsupported_facts_and_flags_review(monkeypatch):
         facts = db.query(Fact).filter_by(document_id=doc.id).all()
         assert {f.original for f in facts} == {"Ramesh Babu Naidu", "AP 31 TX 4521"}
         assert doc.status == "needs_review"
+
+
+def test_partial_name_queries_return_name_matches_too():
+    for q in ("Rameshbabu", "Ramesh Naidu", "Babu"):
+        names = {m["name"] for m in search("inv_vizag", q)["name_matches"]}
+        assert "Ramesh Babu Naidu" in names or "Rameshbabu Naidu" in names, q
+    assert not any(m["name"] == "Munaswamy" for m in search("inv_vizag", "Muna")["name_matches"])  # other district stays hidden

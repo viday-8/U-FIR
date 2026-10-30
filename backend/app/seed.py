@@ -37,6 +37,8 @@ def main():
                 db.flush()
                 search.index_page(db, page)
         db.commit()
+    from . import cache
+    cache.bump()
     print(f"Seeded {len(USERS)} users, {len(CASES)} cases. Demo password: {DEMO_PASSWORD}")
 
 

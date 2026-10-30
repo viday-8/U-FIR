@@ -1,17 +1,20 @@
-import { ClipboardCheck, FileUp, FolderOpen, Gavel, Gauge, LayoutDashboard, LogOut, MapPin, MessageSquare, Network, ScrollText, Search, ShieldCheck } from 'lucide-react'
-import { useEffect, useState, type ReactNode } from 'react'
-import { api, getDistrict, getRole, hasToken, setSession } from './api'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { getDistrict, getRole, getUsername, hasToken, setSession } from './api'
 import Audit from './Audit'
 import CasesList from './CasesList'
 import Cockpit from './Cockpit'
 import Copilot from './Copilot'
 import Dashboard from './Dashboard'
+import Deadlines from './Deadlines'
 import Governance from './Governance'
 import Hotspots from './Hotspots'
 import Intake from './Intake'
-import ReviewQueue from './ReviewQueue'
+import Login from './Login'
 import Relationships from './Relationships'
+import ReviewQueue from './ReviewQueue'
 import SearchPage from './SearchPage'
+import { useLang, useT } from './i18n'
+import { Breadcrumbs, CommandPalette, CrumbProvider, Footer, Masthead, NavBar, ShortcutsHelp, Toaster, UtilityBar, ALL_ITEMS, usePrefs } from './Shell'
 import { StudioEditor, StudioList } from './Studio'
 
 function useHash() {
@@ -21,91 +24,75 @@ function useHash() {
   return h
 }
 
-function Login({ onDone }: { onDone: () => void }) {
-  const [u, setU] = useState('inv_vizag')
-  const [p, setP] = useState('demo123')
-  const [err, setErr] = useState('')
-  const submit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    try {
-      const r = await api<{ token: string; role: string; district: string | null }>('/auth/login', { method: 'POST', body: JSON.stringify({ username: u, password: p }) })
-      setSession(r.token, r.role, r.district ?? ''); onDone()
-    } catch { setErr('Invalid username or password') }
-  }
-  return (
-    <div className="loginwrap">
-      <form onSubmit={submit} className="card login">
-        <div className="brand big"><ShieldCheck size={26} /> u-FIR Nexus</div>
-        <p className="muted">Unified case intelligence for Prohibition &amp; Excise officers.</p>
-        <label>Username<input value={u} onChange={e => setU(e.target.value)} autoComplete="username" /></label>
-        <label>Password<input type="password" value={p} onChange={e => setP(e.target.value)} autoComplete="current-password" /></label>
-        {err && <div className="errorbox" role="alert">{err}</div>}
-        <button className="btn primary" type="submit">Sign in</button>
-        <details className="small"><summary>Demo accounts (synthetic data, password demo123)</summary>
-          <p>inv_vizag · sup_vizag · analyst_vizag (Visakhapatnam)<br />inv_guntur · sup_guntur (Guntur)<br />inv_chittoor (Chittoor) · admin (all districts)</p></details>
-      </form>
-    </div>
-  )
-}
-
-const NAV: { href: string; match: string; label: string; icon: ReactNode; roles?: string[] }[] = [
-  { href: '#/dashboard', match: '/dashboard', label: 'Command Center', icon: <LayoutDashboard size={17} /> },
-  { href: '#/cases', match: '/cases', label: 'Cases', icon: <FolderOpen size={17} /> },
-  { href: '#/intake', match: '/intake', label: 'Upload Case Files', icon: <FileUp size={17} />, roles: ['investigator', 'supervisor', 'admin'] },
-  { href: '#/search', match: '/search', label: 'Search', icon: <Search size={17} /> },
-  { href: '#/copilot', match: '/copilot', label: 'Copilot', icon: <MessageSquare size={17} /> },
-  { href: '#/relationships', match: '/relationships', label: 'Relationships', icon: <Network size={17} /> },
-  { href: '#/reviews', match: '/reviews', label: 'Review Queue', icon: <ClipboardCheck size={17} /> },
-  { href: '#/hotspots', match: '/hotspots', label: 'Hotspots', icon: <MapPin size={17} /> },
-  { href: '#/studio', match: '/studio', label: 'Document Studio', icon: <ScrollText size={17} /> },
-  { href: '#/governance', match: '/governance', label: 'Quality & Governance', icon: <Gauge size={17} />, roles: ['supervisor', 'admin'] },
-  { href: '#/audit', match: '/audit', label: 'Audit Ledger', icon: <Gavel size={17} />, roles: ['supervisor', 'admin'] },
-]
-
 export default function App() {
   const [authed, setAuthed] = useState(hasToken())
   const hash = useHash()
+  const prefs = usePrefs()
+  const t = useT()
+  const { swapping } = useLang()
+  const [palette, setPalette] = useState(false)
+  const [help, setHelp] = useState(false)
+  const [crumb, setCrumb] = useState('')
+  const search = useRef<HTMLInputElement>(null)
   const [path, query = ''] = hash.split('?')
   const params = new URLSearchParams(query)
   const parts = path.split('/').filter(Boolean)
   const role = getRole()
 
+  // keyboard shortcuts: "/" focuses search, Ctrl/Cmd+K opens quick find
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement
+      const typing = ['INPUT', 'TEXTAREA', 'SELECT'].includes(t.tagName) || t.isContentEditable
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k' && authed) { e.preventDefault(); setPalette(p => !p) }
+      else if (e.key === '/' && !typing && authed) { e.preventDefault(); search.current?.focus() }
+      else if (e.key === '?' && !typing && authed) { e.preventDefault(); setHelp(h => !h) }
+    }
+    addEventListener('keydown', onKey); return () => removeEventListener('keydown', onKey)
+  }, [authed])
+
+  const key = parts[0] === 'relationships' ? 'network' : parts[0] || 'dashboard'
+  const current = ALL_ITEMS.find(i => i.match === key)
+  useEffect(() => { document.title = authed ? `${crumb || t(current?.label ?? 'Command Center')} · U-FIR ANVESHANA` : 'U-FIR ANVESHANA (అన్వేషణ)' }, [crumb, current, t, authed])
+
+  const rule = ALL_ITEMS.find(n => n.roles && key === n.match)
+  const allowed = !rule || rule.roles!.includes(role)
   let page: ReactNode
   if (parts[0] === 'cases' && parts[1]) page = <Cockpit id={Number(parts[1])} />
   else if (parts[0] === 'cases') page = <CasesList />
   else if (parts[0] === 'intake') page = <Intake district={getDistrict()} />
   else if (parts[0] === 'search') page = <SearchPage key={params.get('q') ?? ''} initial={params.get('q') ?? ''} />
   else if (parts[0] === 'copilot') page = <Copilot key={params.get('case') ?? ''} initialCase={params.get('case') ?? ''} />
-  else if (parts[0] === 'relationships') page = <Relationships />
+  else if (parts[0] === 'network' || parts[0] === 'relationships') page = <Relationships key={params.get('focus') ?? ''} focus={params.get('focus') ?? ''} />
   else if (parts[0] === 'studio' && parts[1]) page = <StudioEditor id={Number(parts[1])} />
   else if (parts[0] === 'studio') page = <StudioList status={params.get('status') ?? ''} />
   else if (parts[0] === 'reviews') page = <ReviewQueue type={params.get('type') ?? ''} />
+  else if (parts[0] === 'deadlines') page = <Deadlines />
   else if (parts[0] === 'hotspots') page = <Hotspots />
   else if (parts[0] === 'governance') page = <Governance />
   else if (parts[0] === 'audit') page = <Audit />
   else page = <Dashboard />
+  if (!allowed) page = <div className="card pad" role="alert"><h1>Not available for your role</h1><p className="muted">This page is only for {rule!.roles!.join(' / ')} accounts. Use the menu to continue.</p><a className="btn" href="#/dashboard">Back to Command Center</a></div>
+
+  const signOut = () => { setSession(''); setAuthed(false); location.hash = '' }
 
   return (
-    <>
-      <button className="skip" onClick={() => document.getElementById('main')?.focus()}>Skip to main content</button>
-      <div className="banner" role="status">DEMO · SYNTHETIC DATA · not connected to any live system</div>
+    <div className={'app' + (swapping ? ' swapping' : '')}>
+      <button className="skip" onClick={() => document.getElementById('main')?.focus()}>{t('Skip to main content')}</button>
+      <div className="tricolour" aria-hidden><i /><i /><i /></div>
+      <UtilityBar prefs={prefs} onHelp={() => setHelp(true)} authed={authed} />
       {!authed ? <Login onDone={() => { location.hash = '/dashboard'; setAuthed(true) }} /> : (
-        <div className="shell">
-          <nav className="nav" aria-label="Main">
-            <div className="brand"><ShieldCheck size={20} /> u-FIR Nexus</div>
-            <ul>
-              {NAV.filter(n => !n.roles || n.roles.includes(role)).map(n => (
-                <li key={n.href}><a href={n.href} aria-current={parts[0] === n.match.slice(1) ? 'page' : undefined}>{n.icon}{n.label}</a></li>
-              ))}
-            </ul>
-            <div className="navfoot">
-              <div className="small">Signed in as<br /><strong>{role}</strong></div>
-              <button className="navbtn" onClick={() => { setSession(''); setAuthed(false); location.hash = '' }}><LogOut size={15} /> Sign out</button>
-            </div>
-          </nav>
-          <main id="main" tabIndex={-1}>{page}</main>
-        </div>
+        <>
+          <Masthead username={getUsername()} role={role} district={getDistrict()} onSignOut={signOut} searchRef={search} />
+          <NavBar role={role} parts={parts} hash={hash} onPalette={() => setPalette(true)} />
+          <Breadcrumbs parts={parts} role={role} extra={crumb} />
+          <CrumbProvider value={setCrumb}><main id="main" tabIndex={-1}>{page}</main></CrumbProvider>
+          <CommandPalette open={palette} onClose={() => setPalette(false)} role={role} />
+          <ShortcutsHelp open={help} onClose={() => setHelp(false)} />
+          <Toaster />
+        </>
       )}
-    </>
+      <Footer />
+    </div>
   )
 }

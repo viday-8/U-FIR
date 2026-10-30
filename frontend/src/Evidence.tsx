@@ -1,6 +1,7 @@
 import { FileText } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { api, type Doc } from './api'
+import { useT } from './i18n'
 import { Badge, ErrorBox, Loading, Notice } from './ui'
 
 export type Evidence = { docId: number; page: number; span: string; label: string }
@@ -12,6 +13,7 @@ function Highlighted({ text, span }: { text: string; span: string }) {
 }
 
 export function EvidenceViewer({ ev }: { ev: Evidence | null }) {
+  const t = useT()
   const [doc, setDoc] = useState<Doc | null>(null)
   const [err, setErr] = useState('')
   useEffect(() => {
@@ -22,7 +24,7 @@ export function EvidenceViewer({ ev }: { ev: Evidence | null }) {
   useEffect(() => { document.getElementById('cited')?.scrollIntoView({ block: 'center', behavior: 'smooth' }) }, [doc, ev?.span])
   return (
     <aside aria-label="Source evidence" className="card evidence">
-      <div className="cardhead"><h2><FileText size={16} /> Source evidence</h2></div>
+      <div className="cardhead"><h2><FileText size={16} /> {t('Source evidence')}</h2></div>
       {!ev && <p className="muted pad">Select a citation, timeline event or source chip to see the exact passage in the original record.</p>}
       {err && <ErrorBox message={err} />}
       {ev && !doc && !err && <Loading what="Opening source" />}

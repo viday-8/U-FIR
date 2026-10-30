@@ -1,11 +1,59 @@
 import { FileUp } from 'lucide-react'
 import { useRef, useState } from 'react'
-import { api, type Case, type IntakeResult } from './api'
+import { api, getRole, type Case, type CaseMeta, type CaseNetwork, type IntakeResult } from './api'
 import { Badge, Empty, ErrorBox, Loading, Notice, PageHeader, useAsync } from './ui'
 
 type Row = IntakeResult & { file: File; include: boolean; docType: string; target: string }  // target: case id or 'new'
 type Done = { name: string; status: string; error?: string; caseId?: number }
 const DOC_TYPES: [string, string][] = [['fir', 'FIR'], ['seizure', 'Seizure panchanama'], ['diary', 'Case diary'], ['progress', 'Progress report'], ['remand', 'Remand report']]
+
+function LeadReview({ id, onDone }: { id: number; onDone: () => void }) {
+  const [reason, setReason] = useState('')
+  const [msg, setMsg] = useState('')
+  const decide = async (decision: string) => { setMsg(''); try { await api(`/candidates/${id}/review`, { method: 'POST', body: JSON.stringify({ decision, reason }) }); onDone() } catch (e) { setMsg((e as Error).message) } }
+  return (
+    <div className="reviewrow">
+      <input aria-label="Reason for your decision" placeholder="Reason (required to confirm or reject)" value={reason} onChange={e => setReason(e.target.value)} />
+      <button className="btn sm primary" onClick={() => decide('confirm')}>Same person</button>
+      <button className="btn sm" onClick={() => decide('reject')}>Not the same</button>
+      <button className="btn sm" onClick={() => decide('defer')}>Decide later</button>
+      <a className="link small" href={`#/network?focus=link:${id}`}>Why linked?</a>
+      {msg && <span className="errtext small" role="alert">{msg}</span>}
+    </div>
+  )
+}
+
+function Impact({ caseId, caseNo }: { caseId: number; caseNo: string }) {
+  const meta = useAsync(() => api<CaseMeta>(`/cases/${caseId}/meta`), [caseId])
+  const net = useAsync(() => api<CaseNetwork>(`/cases/${caseId}/network`), [caseId])
+  const canReview = ['investigator', 'supervisor', 'admin'].includes(getRole())
+  if (meta.loading || net.loading) return <Loading what={`Analysing ${caseNo}`} />
+  const m = meta.data, n = net.data
+  if (!m || !n) return null
+  return (
+    <section className="card" aria-label={`Impact of upload on ${caseNo}`}>
+      <div className="cardhead"><h2>What this upload added to {caseNo}</h2><a className="btn sm" href={`#/network?focus=case:${caseId}`}>View in network</a></div>
+      <div className="pad">
+        <div>{m.offence.map(o => <span key={o} className="badge info">{o}</span>)}</div>
+        <ul className="facts">
+          <li><strong>{n.summary.people}</strong> person record(s): {m.accused.map(a => a.name).join(', ') || 'none found'}</li>
+          <li><strong>{m.vehicles.length}</strong> vehicle(s): {m.vehicles.join(', ') || 'none found'} · items: {m.items.join(', ') || 'none found'} · places: {m.places.join(', ') || 'none found'}</li>
+        </ul>
+        {n.summary.possible_matches + n.summary.shared_vehicles === 0
+          ? <Notice>No links to other cases were found. The people and vehicles in these documents are new to the records you can access.</Notice>
+          : <Notice tone="warn"><strong>New connections found.</strong> {n.summary.possible_matches} possible person match(es) and {n.summary.shared_vehicles} shared vehicle(s) link this case to {n.summary.related_cases} other case(s). These are leads, not findings: decide each one below, with a reason, or leave it for the Review Queue.</Notice>}
+        <ul className="list">
+          {n.people.flatMap(p => p.links.map(l => (
+            <li key={l.candidate_id}><strong>{p.name}</strong> ↔ {l.other.name} <span className="muted small">({l.other.case_no}) · {l.strength} match, score {l.score}</span>
+              <div className="small muted">{l.top_signals.join(' · ')}</div>
+              {l.status === 'unreviewed' || l.status === 'deferred' ? (canReview ? <LeadReview id={l.candidate_id} onDone={net.reload} /> : <a className="link small" href={`#/network?focus=link:${l.candidate_id}`}>Why linked?</a>) : <span className="badge ok">{l.status === 'confirmed' ? 'Confirmed same person' : l.status}</span>}</li>)))}
+          {n.shared_vehicles.map(v => <li key={v.vehicle}>Vehicle <strong>{v.vehicle}</strong> also appears in {v.cases.map(c => c.case_no).join(', ')}</li>)}
+        </ul>
+        <p className="small muted">Undecided leads stay in the <a href="#/reviews?type=identity">Review Queue</a>; the <a href={`#/network?focus=case:${caseId}`}>network</a> shows them in context.</p>
+      </div>
+    </section>
+  )
+}
 
 export default function Intake({ district }: { district: string | null }) {
   const cases = useAsync(() => api<Case[]>('/cases'), [])
@@ -116,6 +164,7 @@ export default function Intake({ district }: { district: string | null }) {
           {!busy && done.length > 0 && <p className="pad muted small">Processed documents are searchable now. Anything marked “Needs review” is waiting in the <a href="#/reviews?type=extraction">Review Queue</a>.</p>}
         </section>
       )}
+      {!busy && done && [...new Map(done.filter(d => d.caseId).map(d => [d.caseId!, d])).keys()].map(cid => <Impact key={cid} caseId={cid} caseNo={cases.data?.find(c => c.id === cid)?.case_no ?? `case ${cid}`} />)}
     </>
   )
 }
